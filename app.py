@@ -13,7 +13,6 @@ def add_print_button():
         """
         <style>
         @media print {
-            /* Hide the Streamlit sidebar, header, and menus completely during print */
             [data-testid="stSidebar"], 
             header, 
             footer, 
@@ -21,7 +20,6 @@ def add_print_button():
             button {
                 display: none !important;
             }
-            /* Force the main container to take up full page width */
             .main .block-container {
                 padding: 0 !important;
                 margin: 0 !important;
@@ -76,17 +74,17 @@ def update_state_val(key, val):
     st.session_state.saved_state[key] = val
     save_data(st.session_state.saved_state)
 
-# Helper function to track dates automatically when checkboxes are changed
-def handle_checkbox_change(state_key, date_key):
-    # Check if the state changed from False to True
-    current_val = st.session_state[state_key]
-    update_state_val(state_key, current_val)
-    
-    if current_val: # If checked, log today's date if it doesn't exist yet
-        if not get_state_val(date_key, None):
-            update_state_val(date_key, date.today().strftime("%d.%m.%Y"))
-    else: # If unchecked, clear out the logged date
-        update_state_val(date_key, "")
+# FIXED: Helper function handles state tracking using the exact checkbox key safely
+def handle_checkbox_change(cb_key, save_key, date_key):
+    if cb_key in st.session_state:
+        current_val = st.session_state[cb_key]
+        update_state_val(save_key, current_val)
+        
+        if current_val: 
+            if not get_state_val(date_key, None):
+                update_state_val(date_key, date.today().strftime("%d.%m.%Y"))
+        else: 
+            update_state_val(date_key, "")
 
 # ==========================================
 # SIDEBAR - FINANCIAL PRICE SETTINGS
@@ -138,13 +136,12 @@ with tab_arka:
         with target_col:
             st.write(f"### {section} ({area} m²)")
             
-            # Setup dynamic checkbox actions with callback arguments
-            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"arka_ast_{idx}", False), key=f"arka_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_ast_{idx}", f"date_arka_ast_{idx}"))
-            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"arka_siv_{idx}", False), key=f"arka_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_siv_{idx}", f"date_arka_siv_{idx}"))
-            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"arka_man_{idx}", False), key=f"arka_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_man_{idx}", f"date_arka_man_{idx}"))
-            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"arka_fil_{idx}", False), key=f"arka_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_fil_{idx}", f"date_arka_fil_{idx}"))
-            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"arka_dek_{idx}", False), key=f"arka_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_dek_{idx}", f"date_arka_dek_{idx}"))
-            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"arka_boy_{idx}", False), key=f"arka_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_boy_{idx}", f"date_arka_boy_{idx}"))
+            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"arka_ast_{idx}", False), key=f"arka_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_ast_cb_{idx}", f"arka_ast_{idx}", f"date_arka_ast_{idx}"))
+            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"arka_siv_{idx}", False), key=f"arka_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_siv_cb_{idx}", f"arka_siv_{idx}", f"date_arka_siv_{idx}"))
+            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"arka_man_{idx}", False), key=f"arka_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_man_cb_{idx}", f"arka_man_{idx}", f"date_arka_man_{idx}"))
+            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"arka_fil_{idx}", False), key=f"arka_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_fil_cb_{idx}", f"arka_fil_{idx}", f"date_arka_fil_{idx}"))
+            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"arka_dek_{idx}", False), key=f"arka_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_dek_cb_{idx}", f"arka_dek_{idx}", f"date_arka_dek_{idx}"))
+            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"arka_boy_{idx}", False), key=f"arka_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_boy_cb_{idx}", f"arka_boy_{idx}", f"date_arka_boy_{idx}"))
             
             sec_progress = (
                 (weights["Astar"] if ast_val else 0) + (weights["Anove Sıva (Kaba)"] if siv_val else 0) +
@@ -170,12 +167,12 @@ with tab_on:
         target_col = col1 if idx % 2 == 0 else col2
         with target_col:
             st.write(f"### {section} ({area} m²)")
-            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"on_ast_{idx}", False), key=f"on_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_ast_{idx}", f"date_on_ast_{idx}"))
-            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"on_siv_{idx}", False), key=f"on_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_siv_{idx}", f"date_on_siv_{idx}"))
-            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"on_man_{idx}", False), key=f"on_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_man_{idx}", f"date_on_man_{idx}"))
-            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"on_fil_{idx}", False), key=f"on_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_fil_{idx}", f"date_on_fil_{idx}"))
-            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"on_dek_{idx}", False), key=f"on_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_dek_{idx}", f"date_on_dek_{idx}"))
-            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"on_boy_{idx}", False), key=f"on_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_boy_{idx}", f"date_on_boy_{idx}"))
+            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"on_ast_{idx}", False), key=f"on_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_ast_cb_{idx}", f"on_ast_{idx}", f"date_on_ast_{idx}"))
+            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"on_siv_{idx}", False), key=f"on_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_siv_cb_{idx}", f"on_siv_{idx}", f"date_on_siv_{idx}"))
+            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"on_man_{idx}", False), key=f"on_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_man_cb_{idx}", f"on_man_{idx}", f"date_on_man_{idx}"))
+            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"on_fil_{idx}", False), key=f"on_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_fil_cb_{idx}", f"on_fil_{idx}", f"date_on_fil_{idx}"))
+            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"on_dek_{idx}", False), key=f"on_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_dek_cb_{idx}", f"on_dek_{idx}", f"date_on_dek_{idx}"))
+            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"on_boy_{idx}", False), key=f"on_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_boy_cb_{idx}", f"on_boy_{idx}", f"date_on_boy_{idx}"))
             
             sec_progress = (
                 (weights["Astar"] if ast_val else 0) + (weights["Anove Sıva (Kaba)"] if siv_val else 0) +
@@ -216,7 +213,6 @@ with tab_banyo:
                 saved_status = get_state_val(f"b1_stat_{idx}", f["b1_status"])
                 status_1 = st.selectbox(f"Banyo 1 ({f['b1_area']} m²)", status_options, index=status_options.index(saved_status), key=f"b1_sb_{idx}")
                 
-                # Check for change to drop completion date automatically
                 if status_1 != saved_status:
                     update_state_val(f"b1_stat_{idx}", status_1)
                     if status_1 == "Tamamlandı":
@@ -245,7 +241,7 @@ with tab_banyo:
 banyo_net_percentage = banyo_completed_area / banyo_total_area if banyo_total_area > 0 else 0
 
 # ==========================================
-# NEW TAB: AUTOMATED TIMELINE GENERATION
+# TAB: AUTOMATED TIMELINE GENERATION
 # ==========================================
 with tab_timeline:
     add_print_button()
@@ -281,7 +277,6 @@ with tab_timeline:
 
     if timeline_events:
         df_timeline = pd.DataFrame(timeline_events)
-        # Sort values by converted datetime to make it sequential
         df_timeline['dt_obj'] = pd.to_datetime(df_timeline['Tarih'], format='%d.%m.%Y')
         df_timeline = df_timeline.sort_values(by='dt_obj', ascending=False).drop(columns=['dt_obj'])
         st.dataframe(df_timeline, use_container_width=True)
