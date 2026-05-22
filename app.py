@@ -7,26 +7,47 @@ from datetime import datetime, date
 # Set up page layout
 st.set_page_config(page_title="Şantiye Takip Paneli", layout="wide", page_icon="🏗️")
 
-# Helper function to inject a clean print button on every page tab
+# Clean, Robust PDF Printer Injection
 def add_print_button():
     st.markdown(
         """
+        <style>
+        @media print {
+            /* Hide the Streamlit sidebar, header, and menus completely during print */
+            [data-testid="stSidebar"], 
+            header, 
+            footer, 
+            .stActionButton,
+            button {
+                display: none !important;
+            }
+            /* Force the main container to take up full page width */
+            .main .block-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+        </style>
         <button onclick="window.print()" style="
-            background-color: #4CAF50; 
+            background-color: #2E7D32; 
             color: white; 
-            padding: 8px 16px; 
+            padding: 10px 20px; 
             border: none; 
-            border-radius: 4px; 
+            border-radius: 6px; 
             cursor: pointer; 
             font-weight: bold;
-            margin-bottom: 15px;">
-            🖨️ Bu Sayfayı Yazdır / PDF Yap
+            font-size: 14px;
+            margin-bottom: 20px;
+            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);">
+            🖨️ Sayfayı Temiz PDF Olarak Kaydet / Yazdır
         </button>
         """, 
         unsafe_allow_html=True
     )
 
-st.title("🏗️ Şantiye Hakediş, İlerleme ve Planlama Paneli")
+st.title("🏗️ Şantiye Hakediş, İlerleme ve Canlı Takvim Paneli")
 
 # ==========================================
 # DATA PERSISTENCE (SAVE / LOAD SYSTEM)
@@ -50,11 +71,22 @@ def get_state_val(key, default):
     return st.session_state.saved_state.get(key, default)
 
 def update_state_val(key, val):
-    # Handle datetime JSON serialization safely
     if isinstance(val, (date, datetime)):
         val = val.isoformat()
     st.session_state.saved_state[key] = val
     save_data(st.session_state.saved_state)
+
+# Helper function to track dates automatically when checkboxes are changed
+def handle_checkbox_change(state_key, date_key):
+    # Check if the state changed from False to True
+    current_val = st.session_state[state_key]
+    update_state_val(state_key, current_val)
+    
+    if current_val: # If checked, log today's date if it doesn't exist yet
+        if not get_state_val(date_key, None):
+            update_state_val(date_key, date.today().strftime("%d.%m.%Y"))
+    else: # If unchecked, clear out the logged date
+        update_state_val(date_key, "")
 
 # ==========================================
 # SIDEBAR - FINANCIAL PRICE SETTINGS
@@ -81,12 +113,11 @@ weights = {
     "File ve Astar": 0.20, "Dekoratif Sıva": 0.20, "Boya": 0.15
 }
 
-# ==========================================
-# SEPARATED APP TABS
-# ==========================================
-tab_money, tab_schedule, tab_arka, tab_on, tab_banyo = st.tabs([
+# App Tabs
+tab_money, tab_timeline, tab_schedule, tab_arka, tab_on, tab_banyo = st.tabs([
     "💰 FİNANSAL ÖZET (MONEY)",
-    "📅 PROJE İŞ PROGRAMI (SCHEDULE)",
+    "⏱️ CANLI ŞANTİYE TAKVİMİ (TIMELINE)",
+    "📅 HEDEF İŞ PROGRAMI",
     "🧱 Arka Cephe Takibi", 
     "🏢 Ön Cephe Takibi", 
     "💧 Banyo Yalıtım Takibi"
@@ -107,19 +138,13 @@ with tab_arka:
         with target_col:
             st.write(f"### {section} ({area} m²)")
             
-            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"arka_ast_{idx}", True), key=f"arka_ast_cb_{idx}")
-            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"arka_siv_{idx}", True), key=f"arka_siv_cb_{idx}")
-            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"arka_man_{idx}", True), key=f"arka_man_cb_{idx}")
-            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"arka_fil_{idx}", True), key=f"arka_fil_cb_{idx}")
-            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"arka_dek_{idx}", False), key=f"arka_dek_cb_{idx}")
-            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"arka_boy_{idx}", False), key=f"arka_boy_cb_{idx}")
-            
-            update_state_val(f"arka_ast_{idx}", ast_val)
-            update_state_val(f"arka_siv_{idx}", siv_val)
-            update_state_val(f"arka_man_{idx}", man_val)
-            update_state_val(f"arka_fil_{idx}", fil_val)
-            update_state_val(f"arka_dek_{idx}", dek_val)
-            update_state_val(f"arka_boy_{idx}", boy_val)
+            # Setup dynamic checkbox actions with callback arguments
+            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"arka_ast_{idx}", False), key=f"arka_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_ast_{idx}", f"date_arka_ast_{idx}"))
+            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"arka_siv_{idx}", False), key=f"arka_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_siv_{idx}", f"date_arka_siv_{idx}"))
+            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"arka_man_{idx}", False), key=f"arka_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_man_{idx}", f"date_arka_man_{idx}"))
+            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"arka_fil_{idx}", False), key=f"arka_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_fil_{idx}", f"date_arka_fil_{idx}"))
+            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"arka_dek_{idx}", False), key=f"arka_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_dek_{idx}", f"date_arka_dek_{idx}"))
+            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"arka_boy_{idx}", False), key=f"arka_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_boy_{idx}", f"date_arka_boy_{idx}"))
             
             sec_progress = (
                 (weights["Astar"] if ast_val else 0) + (weights["Anove Sıva (Kaba)"] if siv_val else 0) +
@@ -145,19 +170,12 @@ with tab_on:
         target_col = col1 if idx % 2 == 0 else col2
         with target_col:
             st.write(f"### {section} ({area} m²)")
-            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"on_ast_{idx}", False), key=f"on_ast_cb_{idx}")
-            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"on_siv_{idx}", False), key=f"on_siv_cb_{idx}")
-            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"on_man_{idx}", False), key=f"on_man_cb_{idx}")
-            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"on_fil_{idx}", False), key=f"on_fil_cb_{idx}")
-            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"on_dek_{idx}", False), key=f"on_dek_cb_{idx}")
-            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"on_boy_{idx}", False), key=f"on_boy_cb_{idx}")
-            
-            update_state_val(f"on_ast_{idx}", ast_val)
-            update_state_val(f"on_siv_{idx}", siv_val)
-            update_state_val(f"on_man_{idx}", man_val)
-            update_state_val(f"on_fil_{idx}", fil_val)
-            update_state_val(f"on_dek_{idx}", dek_val)
-            update_state_val(f"on_boy_{idx}", boy_val)
+            ast_val = st.checkbox("Astar (%5)", value=get_state_val(f"on_ast_{idx}", False), key=f"on_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_ast_{idx}", f"date_on_ast_{idx}"))
+            siv_val = st.checkbox("Anove Sıva (%15)", value=get_state_val(f"on_siv_{idx}", False), key=f"on_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_siv_{idx}", f"date_on_siv_{idx}"))
+            man_val = st.checkbox("Mantolama (%25)", value=get_state_val(f"on_man_{idx}", False), key=f"on_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_man_{idx}", f"date_on_man_{idx}"))
+            fil_val = st.checkbox("File ve Astar (%20)", value=get_state_val(f"on_fil_{idx}", False), key=f"on_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_fil_{idx}", f"date_on_fil_{idx}"))
+            dek_val = st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"on_dek_{idx}", False), key=f"on_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_dek_{idx}", f"date_on_dek_{idx}"))
+            boy_val = st.checkbox("Boya (%15)", value=get_state_val(f"on_boy_{idx}", False), key=f"on_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_boy_{idx}", f"date_on_boy_{idx}"))
             
             sec_progress = (
                 (weights["Astar"] if ast_val else 0) + (weights["Anove Sıva (Kaba)"] if siv_val else 0) +
@@ -197,16 +215,29 @@ with tab_banyo:
             if f["b1_area"] > 0:
                 saved_status = get_state_val(f"b1_stat_{idx}", f["b1_status"])
                 status_1 = st.selectbox(f"Banyo 1 ({f['b1_area']} m²)", status_options, index=status_options.index(saved_status), key=f"b1_sb_{idx}")
-                update_state_val(f"b1_stat_{idx}", status_1)
                 
+                # Check for change to drop completion date automatically
+                if status_1 != saved_status:
+                    update_state_val(f"b1_stat_{idx}", status_1)
+                    if status_1 == "Tamamlandı":
+                        update_state_val(f"date_b1_{idx}", date.today().strftime("%d.%m.%Y"))
+                    else:
+                        update_state_val(f"date_b1_{idx}", "")
+                        
                 banyo_total_area += f["b1_area"] if status_1 != "Muaf" else 0
                 banyo_completed_area += f["b1_area"] if status_1 == "Tamamlandı" else 0
         with c2:
             if f["b2_area"] > 0:
                 saved_status2 = get_state_val(f"b2_stat_{idx}", f["b2_status"])
                 status_2 = st.selectbox(f"Banyo 2 ({f['b2_area']} m²)", status_options, index=status_options.index(saved_status2), key=f"b2_sb_{idx}")
-                update_state_val(f"b2_stat_{idx}", status_2)
                 
+                if status_2 != saved_status2:
+                    update_state_val(f"b2_stat_{idx}", status_2)
+                    if status_2 == "Tamamlandı":
+                        update_state_val(f"date_b2_{idx}", date.today().strftime("%d.%m.%Y"))
+                    else:
+                        update_state_val(f"date_b2_{idx}", "")
+                        
                 banyo_total_area += f["b2_area"] if status_2 != "Muaf" else 0
                 banyo_completed_area += f["b2_area"] if status_2 == "Tamamlandı" else 0
         st.markdown("---")
@@ -214,47 +245,81 @@ with tab_banyo:
 banyo_net_percentage = banyo_completed_area / banyo_total_area if banyo_total_area > 0 else 0
 
 # ==========================================
-# TAB: PROJECT SCHEDULE & ACHIEVEMENT
+# NEW TAB: AUTOMATED TIMELINE GENERATION
+# ==========================================
+with tab_timeline:
+    add_print_button()
+    st.header("⏱️ Canlı Şantiye İmalat Takvimi")
+    st.markdown("Checklist kutuları işaretlendikçe tamamlanma tarihleri burada otomatik olarak kronolojik listelenir:")
+
+    timeline_events = []
+    
+    # Extract Arka Cephe dates
+    for idx, (section, _) in enumerate(arka_sections.items()):
+        for phase in ["ast", "siv", "man", "fil", "dek", "boy"]:
+            d = get_state_val(f"date_arka_{phase}_{idx}", "")
+            if d:
+                lbl = {"ast":"Astar", "siv":"Anove Sıva", "man":"Mantolama", "fil":"File ve Astar", "dek":"Dekoratif Sıva", "boy":"Boya"}[phase]
+                timeline_events.append({"Tarih": d, "İş Kalemi": "Arka Cephe", "Bölüm / Kat": section, "Aşama": lbl})
+
+    # Extract Ön Cephe dates
+    for idx, (section, _) in enumerate(on_sections.items()):
+        for phase in ["ast", "siv", "man", "fil", "dek", "boy"]:
+            d = get_state_val(f"date_on_{phase}_{idx}", "")
+            if d:
+                lbl = {"ast":"Astar", "siv":"Anove Sıva", "man":"Mantolama", "fil":"File ve Astar", "dek":"Dekoratif Sıva", "boy":"Boya"}[phase]
+                timeline_events.append({"Tarih": d, "İş Kalemi": "Ön Cephe", "Bölüm / Kat": section, "Aşama": lbl})
+
+    # Extract Banyo dates
+    for idx, f in enumerate(floors_data):
+        d1 = get_state_val(f"date_b1_{idx}", "")
+        if d1:
+            timeline_events.append({"Tarih": d1, "İş Kalemi": "Banyolar Yalıtım", "Bölüm / Kat": f["floor"], "Aşama": "Banyo 1 Tamamlandı"})
+        d2 = get_state_val(f"date_b2_{idx}", "")
+        if d2:
+            timeline_events.append({"Tarih": d2, "İş Kalemi": "Banyolar Yalıtım", "Bölüm / Kat": f["floor"], "Aşama": "Banyo 2 Tamamlandı"})
+
+    if timeline_events:
+        df_timeline = pd.DataFrame(timeline_events)
+        # Sort values by converted datetime to make it sequential
+        df_timeline['dt_obj'] = pd.to_datetime(df_timeline['Tarih'], format='%d.%m.%Y')
+        df_timeline = df_timeline.sort_values(by='dt_obj', ascending=False).drop(columns=['dt_obj'])
+        st.dataframe(df_timeline, use_container_width=True)
+    else:
+        st.info("Henüz tamamlanan bir iş adımı yok. Checkboxları işaretlediğinizde takvim burada belirecektir.")
+
+# ==========================================
+# TAB: TARGET SCHEDULE SETTINGS
 # ==========================================
 with tab_schedule:
     add_print_button()
-    st.header("📅 Proje İş Programı Planlama ve Karşılaştırma")
-    st.markdown("Her iş kalemi için hedeflenen tarihleri girerek güncel durumunuzu takip edin:")
+    st.header("📅 Proje Hedef Zaman Çizelgesi")
     
     today = date.today()
-    
-    # Date processing helper
     def parse_saved_date(key, default_date):
         saved = get_state_val(key, None)
         if saved:
-            try:
-                return datetime.fromisoformat(saved).date()
-            except:
-                return saved
+            try: return datetime.fromisoformat(saved).date()
+            except: return saved
         return default_date
 
-    # --- Schedule Inputs ---
     col_item, col_start, col_end = st.columns(3)
-    
     with col_item:
         st.write("##### İş Kalemi")
         st.write("<br><p style='padding:11px 0;'><b>Arka Cephe İmalatları</b></p>", unsafe_allow_html=True)
         st.write("<br><p style='padding:11px 0;'><b>Ön Cephe İmalatları</b></p>", unsafe_allow_html=True)
         st.write("<br><p style='padding:11px 0;'><b>Banyolar Yalıtım</b></p>", unsafe_allow_html=True)
-        
     with col_start:
         st.write("##### Başlangıç Tarihi")
         arka_start = st.date_input("Arka Başlangıç", value=parse_saved_date("arka_start_dt", today), key="arka_s_in", label_visibility="collapsed")
         on_start = st.date_input("Ön Başlangıç", value=parse_saved_date("on_start_dt", today), key="on_s_in", label_visibility="collapsed")
         banyo_start = st.date_input("Banyo Başlangıç", value=parse_saved_date("banyo_start_dt", today), key="banyo_s_in", label_visibility="collapsed")
-        
     with col_end:
-        st.write("##### Bitiş Tarihi (Target)")
+        st.write("##### Bitiş Tarihi")
         arka_end = st.date_input("Arka Bitiş", value=parse_saved_date("arka_end_dt", today), key="arka_e_in", label_visibility="collapsed")
         on_end = st.date_input("Ön Bitiş", value=parse_saved_date("on_end_dt", today), key="on_e_in", label_visibility="collapsed")
         banyo_end = st.date_input("Banyo Bitiş", value=parse_saved_date("banyo_end_dt", today), key="banyo_e_in", label_visibility="collapsed")
 
-    # Save inputs
     update_state_val("arka_start_dt", arka_start)
     update_state_val("on_start_dt", on_start)
     update_state_val("banyo_start_dt", banyo_start)
@@ -262,34 +327,22 @@ with tab_schedule:
     update_state_val("on_end_dt", on_end)
     update_state_val("banyo_end_dt", banyo_end)
 
-    # Calculation function for target achievement based on timeline linear progression
     def calculate_planned_progress(start, end):
-        if today < start:
-            return 0.0
-        if today >= end:
-            return 1.0
+        if today < start: return 0.0
+        if today >= end: return 1.0
         total_days = (end - start).days
-        elapsed_days = (today - start).days
-        return elapsed_days / total_days if total_days > 0 else 1.0
+        return ((today - start).days) / total_days if total_days > 0 else 1.0
 
     planned_arka = calculate_planned_progress(arka_start, arka_end)
     planned_on = calculate_planned_progress(on_start, on_end)
     planned_banyo = calculate_planned_progress(banyo_start, banyo_end)
 
-    # --- Schedule Comparison Dashboard ---
-    st.markdown("### 📊 Planlanan Durum vs. Gerçekleşen Başarı")
-    
+    st.markdown("### 📊 Planlanan Takvim vs. Gerçekleşen İlerleme Analizi")
     def display_schedule_row(title, planned, actual):
         diff = actual - planned
-        if diff < -0.05:
-            status = "🔴 PROGRAMIN GERİSİNDE (DELAYED)"
-            color = "red"
-        elif diff > 0.05:
-            status = "🚀 PROGRAMIN ÖNÜNDE (AHEAD)"
-            color = "green"
-        else:
-            status = "🟢 ZAMANINDA (ON SCHEDULE)"
-            color = "blue"
+        if diff < -0.05: status, color = "🔴 PROGRAMIN GERİSİNDE (DELAYED)", "red"
+        elif diff > 0.05: status, color = "🚀 PROGRAMIN ÖNÜNDE (AHEAD)", "green"
+        else: status, color = "🟢 ZAMANINDA (ON SCHEDULE)", "blue"
             
         st.write(f"#### {title}")
         c_p, c_a, c_s = st.columns(3)
@@ -298,9 +351,9 @@ with tab_schedule:
         c_s.markdown(f"<h5 style='color:{color}; padding-top:10px;'>{status}</h5>", unsafe_allow_html=True)
         st.markdown("---")
 
-    display_schedule_row("Arka Cephe Planlama Analizi", planned_arka, arka_net_percentage)
-    display_schedule_row("Ön Cephe Planlama Analizi", planned_on, on_net_percentage)
-    display_schedule_row("Banyolar Yalıtım Planlama Analizi", planned_banyo, banyo_net_percentage)
+    display_schedule_row("Arka Cephe Planlama", planned_arka, arka_net_percentage)
+    display_schedule_row("Ön Cephe Planlama", planned_on, on_net_percentage)
+    display_schedule_row("Banyolar Yalıtım Planlama", planned_banyo, banyo_net_percentage)
 
 # ==========================================
 # TAB: SEPARATED MONEY DASHBOARD
@@ -308,9 +361,7 @@ with tab_schedule:
 with tab_money:
     add_print_button()
     st.header("💵 Güncel Finansal Hakediş Dağılımı")
-    st.markdown("Üretim kademelerine göre güncellenmiş finansal rapor:")
 
-    # Financial Data
     arka_rev = arka_completed_area * pm_cephe_price
     on_rev = on_completed_area * pm_cephe_price
     banyo_rev = banyo_completed_area * pm_banyo_price
@@ -322,7 +373,6 @@ with tab_money:
     total_cst = arka_cst + on_cst + banyo_cst
     total_prf = total_rev - total_cst
 
-    # Key Metrics
     m1, m2, m3 = st.columns(3)
     m1.metric(label="💼 Proje Müdüründen Alınacak (Hakediş)", value=f"₺ {total_rev:,.2f}")
     m2.metric(label="🛠️ Teknisyenlere Ödenecek Toplam", value=f"₺ {total_cst:,.2f}")
