@@ -94,40 +94,4 @@ def make_report_wrapper(title, content_html):
         <style>
             body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; margin: 30px; line-height: 1.6; }}
             .no-print {{ text-align: center; margin-bottom: 25px; }}
-            .btn {{ background-color: #0d47a1; color: white; padding: 12px 24px; border: none; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }}
-            .header {{ text-align: center; border-bottom: 3px solid #0d47a1; padding-bottom: 15px; margin-bottom: 30px; }}
-            .title {{ font-size: 24px; font-weight: bold; color: #0d47a1; }}
-            .date {{ font-size: 14px; color: #666; margin-top: 5px; }}
-            .grid {{ display: flex; gap: 15px; margin-bottom: 25px; }}
-            .card {{ flex: 1; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; text-align: center; }}
-            .card-lbl {{ font-size: 11px; font-weight: bold; color: #777; text-transform: uppercase; }}
-            .card-val {{ font-size: 20px; font-weight: bold; color: #111; margin-top: 5px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; }}
-            th, td {{ border: 1px solid #dddddd; padding: 10px; text-align: left; font-size: 14px; }}
-            th {{ background-color: #f5f5f5; font-weight: bold; }}
-            tr:nth-child(even) {{ background-color: #fafafa; }}
-            .total {{ font-weight: bold; background-color: #e3f2fd !important; }}
-            .status-badge {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }}
-            @media print {{ .no-print {{ display: none !important; }} body {{ margin: 10px; }} }}
-        </style>
-    </head>
-    <body>
-        <div class="no-print">
-            <button class="btn" onclick="window.print()">🖨️ RAPORU PDF OLARAK KAYDET / YAZDIR</button>
-        </div>
-        <div class="header">
-            <div class="title">{title}</div>
-            <div class="date">Rapor Tarihi: {today_str}</div>
-        </div>
-        {content_html}
-    </body>
-    </html>
-    """
-
-# ==========================================
-# 4. SIDEBAR - FINANCIAL SYSTEM SETTINGS
-# ==========================================
-st.sidebar.header("💵 Birim Fiyat Ayarları (Birim: ₺/m²)")
-
-st.sidebar.subheader("Dış Cephe İşleri (Facades)")
-pm_cephe_price = st.sidebar.number_input("Mülk Sahibi Fiyatı (Cephe)", value=get_state_val("pm_cephe_price",
+            .btn {{
