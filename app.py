@@ -4,31 +4,25 @@ import json
 import os
 from datetime import datetime, date
 
-# Set up page layout
-st.set_page_config(page_title="Şantiye Takip Paneli", layout="wide", page_icon="🏗️")
-
-st.title("🏗️ Şantiye Hakediş, İlerleme ve Canlı Takvim Paneli")
+# ==========================================
+# 1. SAYFA AYARLARI
+# ==========================================
+st.set_page_config(page_title="Havence - Müşteri & Hak Ediş Takip Sistemi", layout="wide", page_icon="🏗️")
 
 # ==========================================
-# DATA PERSISTENCE (SAVE / LOAD SYSTEM)
+# 2. VERİ TABANI MOTORU (JSON)
 # ==========================================
-DB_FILE = "progress_data.json"
+DB_FILE = "total_progress_data.json"
 
 def load_data():
     if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
     return {}
 
 def save_data(data):
-    try:
-        with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        st.error(f"Veri kaydedilirken hata oluştu: {e}")
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 if "saved_state" not in st.session_state:
     st.session_state.saved_state = load_data()
@@ -37,15 +31,15 @@ def get_state_val(key, default):
     return st.session_state.saved_state.get(key, default)
 
 def update_state_val(key, val):
+    if isinstance(val, (date, datetime)):
+        val = val.isoformat()
     st.session_state.saved_state[key] = val
     save_data(st.session_state.saved_state)
 
-# Helper function handles state tracking using the exact checkbox key safely
 def handle_checkbox_change(cb_key, save_key, date_key):
     if cb_key in st.session_state:
         current_val = st.session_state[cb_key]
         update_state_val(save_key, current_val)
-        
         if current_val: 
             if not get_state_val(date_key, None):
                 update_state_val(date_key, date.today().strftime("%d.%m.%Y"))
@@ -53,199 +47,37 @@ def handle_checkbox_change(cb_key, save_key, date_key):
             update_state_val(date_key, "")
 
 # ==========================================
-# SIDEBAR - FINANCIAL PRICE SETTINGS
-# ==========================================
-st.sidebar.header("💵 Birim Fiyat Ayarları")
-
-st.sidebar.subheader("1. Arka & Ön Cephe İmalatları")
-pm_cephe_price = st.sidebar.number_input("PM Cephe Birim Fiyatı (₺/m²)", value=get_state_val("pm_cephe_price", 500.0), step=10.0, key="pm_cephe_input")
-update_state_val("pm_cephe_price", pm_cephe_price)
-
-tech_cephe_price = st.sidebar.number_input("Teknisyen Cephe Birim Fiyatı (₺/m²)", value=get_state_val("tech_cephe_price", 350.0), step=10.0, key="tech_cephe_input")
-update_state_val("tech_cephe_price", tech_cephe_price)
-
-st.sidebar.subheader("2. Banyolar Suwmatik Yalıtımı")
-pm_banyo_price = st.sidebar.number_input("PM Banyo Birim Fiyatı (₺/m²)", value=get_state_val("pm_banyo_price", 190.0), step=5.0, key="pm_banyo_input")
-update_state_val("pm_banyo_price", pm_banyo_price)
-
-tech_banyo_price = st.sidebar.number_input("Teknisyen Banyo Birim Fiyatı (₺/m²)", value=get_state_val("tech_banyo_price", 130.0), step=5.0, key="tech_banyo_input")
-update_state_val("tech_banyo_price", tech_banyo_price)
-
-# Task Weights for Facade
-weights = {
-    "Astar": 0.05, 
-    "Anove Sıva (Kaba)": 0.15, 
-    "Mantolama": 0.25, 
-    "File ve Astar": 0.20, 
-    "Dekoratif Sıva": 0.20, 
-    "Boya": 0.15
-}
-
-# ==========================================
-# PRE-COMPUTE ALL PROGRESS AND FINANCES
-# ==========================================
-today_str = date.today().strftime('%d.%m.%Y')
-
-# --- Arka Cephe Calculations ---
-arka_sections = {
-    "Ana Yüzey (Yüz)": 104.4, 
-    "Yan Cephe 1 (Cenip 1)": 136.5, 
-    "Yan Cephe 2 (Cenip 2)": 83.0, 
-    "Yan Cephe 3 (Cenip 3)": 33.0
-}
-arka_progresses = {}
-for idx, (section, area) in enumerate(arka_sections.items()):
-    ast = get_state_val(f"arka_ast_{idx}", False)
-    siv = get_state_val(f"arka_siv_{idx}", False)
-    man = get_state_val(f"arka_man_{idx}", False)
-    fil = get_state_val(f"arka_fil_{idx}", False)
-    dek = get_state_val(f"arka_dek_{idx}", False)
-    boy = get_state_val(f"arka_boy_{idx}", False)
-    
-    sec_progress = (
-        (weights["Astar"] if ast else 0) + 
-        (weights["Anove Sıva (Kaba)"] if siv else 0) + 
-        (weights["Mantolama"] if man else 0) + 
-        (weights["File ve Astar"] if fil else 0) + 
-        (weights["Dekoratif Sıva"] if dek else 0) + 
-        (weights["Boya"] if boy else 0)
-    )
-    arka_progresses[section] = sec_progress
-
-arka_total_area = sum(arka_sections.values())
-arka_completed_area = sum(arka_sections[sec] * arka_progresses[sec] for sec in arka_sections)
-arka_net_percentage = arka_completed_area / arka_total_area if arka_total_area > 0 else 0
-
-# --- Ön Cephe Calculations ---
-on_sections = {
-    "Ana Yüzey (Yüz)": 80.0, 
-    "Yan Cephe 1": 68.25, 
-    "Yan Cephe 2": 41.5
-}
-on_progresses = {}
-for idx, (section, area) in enumerate(on_sections.items()):
-    ast = get_state_val(f"on_ast_{idx}", False)
-    siv = get_state_val(f"on_siv_{idx}", False)
-    man = get_state_val(f"on_man_{idx}", False)
-    fil = get_state_val(f"on_fil_{idx}", False)
-    dek = get_state_val(f"on_dek_{idx}", False)
-    boy = get_state_val(f"on_boy_{idx}", False)
-    
-    sec_progress = (
-        (weights["Astar"] if ast else 0) + 
-        (weights["Anove Sıva (Kaba)"] if siv else 0) + 
-        (weights["Mantolama"] if man else 0) + 
-        (weights["File ve Astar"] if fil else 0) + 
-        (weights["Dekoratif Sıva"] if dek else 0) + 
-        (weights["Boya"] if boy else 0)
-    )
-    on_progresses[section] = sec_progress
-
-on_total_area = sum(on_sections.values())
-on_completed_area = sum(on_sections[sec] * on_progresses[sec] for sec in on_sections)
-on_net_percentage = on_completed_area / on_total_area if on_total_area > 0 else 0
-
-# --- Banyolar Calculations ---
-floors_data = [
-    {"floor": "Bodrum Kat (-1)", "b1_area": 34.35, "b1_status": "Bekliyor", "b2_area": 0.0, "b2_status": "Muaf"},
-    {"floor": "Giriş Holü (0)", "b1_area": 34.35, "b1_status": "Bekliyor", "b2_area": 15.68, "b2_status": "Tamamlandı"},
-    {"floor": "1. Kat", "b1_area": 34.35, "b1_status": "Bekliyor", "b2_area": 20.87, "b2_status": "Bekliyor"},
-    {"floor": "2. Kat", "b1_area": 34.35, "b1_status": "Bekliyor", "b2_area": 20.87, "b2_status": "Bekliyor"},
-    {"floor": "3. Kat", "b1_area": 34.35, "b1_status": "Bekliyor", "b2_area": 20.87, "b2_status": "Bekliyor"},
-    {"floor": "Çatı Katı", "b1_area": 25.64, "b1_status": "Bekliyor", "b2_area": 0.0, "b2_status": "Muaf"}
-]
-
-banyo_total_area = 0
-banyo_completed_area = 0
-for idx, f in enumerate(floors_data):
-    b1_s = get_state_val(f"b1_stat_{idx}", f["b1_status"])
-    b2_s = get_state_val(f"b2_stat_{idx}", f["b2_status"])
-    
-    if f["b1_area"] > 0 and b1_s != "Muaf":
-        banyo_total_area += f["b1_area"]
-        if b1_s == "Tamamlandı": 
-            banyo_completed_area += f["b1_area"]
-            
-    if f["b2_area"] > 0 and b2_s != "Muaf":
-        banyo_total_area += f["b2_area"]
-        if b2_s == "Tamamlandı": 
-            banyo_completed_area += f["b2_area"]
-
-banyo_net_percentage = banyo_completed_area / banyo_total_area if banyo_total_area > 0 else 0
-
-# --- Financial Totals ---
-arka_rev = arka_completed_area * pm_cephe_price
-on_rev = on_completed_area * pm_cephe_price
-banyo_rev = banyo_completed_area * pm_banyo_price
-
-arka_cst = arka_completed_area * tech_cephe_price
-on_cst = on_completed_area * tech_cephe_price
-banyo_cst = banyo_completed_area * tech_banyo_price
-
-total_rev = arka_rev + on_rev + banyo_rev
-total_cst = arka_cst + on_cst + banyo_cst
-total_prf = total_rev - total_cst
-
-# --- Timeline Events Assembly ---
-timeline_events = []
-for idx, (section, _) in enumerate(arka_sections.items()):
-    for phase in ["ast", "siv", "man", "fil", "dek", "boy"]:
-        d = get_state_val(f"date_arka_{phase}_{idx}", "")
-        if d: 
-            lbl = {"ast":"Astar","siv":"Sıva","man":"Mantolama","fil":"File+Astar","dek":"Dekoratif","boy":"Boya"}[phase]
-            timeline_events.append({"Tarih": d, "İş Kalemi": "Arka Cephe", "Bölüm/Kat": section, "Aşama": lbl})
-
-for idx, (section, _) in enumerate(on_sections.items()):
-    for phase in ["ast", "siv", "man", "fil", "dek", "boy"]:
-        d = get_state_val(f"date_on_{phase}_{idx}", "")
-        if d: 
-            lbl = {"ast":"Astar","siv":"Sıva","man":"Mantolama","fil":"File+Astar","dek":"Dekoratif","boy":"Boya"}[phase]
-            timeline_events.append({"Tarih": d, "İş Kalemi": "Ön Cephe", "Bölüm/Kat": section, "Aşama": lbl})
-
-for idx, f in enumerate(floors_data):
-    d1 = get_state_val(f"date_b1_{idx}", "")
-    if d1: 
-        timeline_events.append({"Tarih": d1, "İş Kalemi": "Banyo Yalıtım", "Bölüm/Kat": f["floor"], "Aşama": "Banyo 1 Tamamlandı"})
-    d2 = get_state_val(f"date_b2_{idx}", "")
-    if d2: 
-        timeline_events.append({"Tarih": d2, "İş Kalemi": "Banyo Yalıtım", "Bölüm/Kat": f["floor"], "Aşama": "Banyo 2 Tamamlandı"})
-
-# ==========================================
-# SMART HTML/PDF STANDALONE REPORT GENERATOR
+# 3. RAPOR ÇIKTI ŞABLONU
 # ==========================================
 def make_report_wrapper(title, content_html):
+    today_str = date.today().strftime('%d.%m.%Y')
     return f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="tr">
     <head>
         <meta charset="utf-8">
-        <title>{title} - {today_str}</title>
+        <title>{title}</title>
         <style>
-            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; margin: 30px; line-height: 1.6; }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; margin: 30px; line-height: 1.6; text-align: left; }}
             .no-print {{ text-align: center; margin-bottom: 25px; }}
-            .btn {{ background-color: #2E7D32; color: white; padding: 12px 24px; border: none; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }}
-            .header {{ text-align: center; border-bottom: 3px solid #2E7D32; padding-bottom: 15px; margin-bottom: 30px; }}
-            .title {{ font-size: 24px; font-weight: bold; color: #2E7D32; }}
+            .btn {{ background-color: #1E4620; color: white; padding: 12px 24px; border: none; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }}
+            .header {{ text-align: center; border-bottom: 3px solid #1E4620; padding-bottom: 15px; margin-bottom: 30px; }}
+            .title {{ font-size: 24px; font-weight: bold; color: #1E4620; }}
             .date {{ font-size: 14px; color: #666; margin-top: 5px; }}
-            .grid {{ display: flex; gap: 15px; margin-bottom: 25px; }}
-            .card {{ flex: 1; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; text-align: center; }}
-            .card-lbl {{ font-size: 11px; font-weight: bold; color: #777; text-transform: uppercase; }}
-            .card-val {{ font-size: 20px; font-weight: bold; color: #111; margin-top: 5px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; }}
-            th, td {{ border: 1px solid #dddddd; padding: 10px; text-align: left; font-size: 14px; }}
-            th {{ background-color: #f5f5f5; font-weight: bold; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; text-align: left; }}
+            th, td {{ border: 1px solid #dddddd; padding: 12px; font-size: 14px; }}
+            th {{ background-color: #f5f5f5; font-weight: bold; color: #111; }}
             tr:nth-child(even) {{ background-color: #fafafa; }}
             .total {{ font-weight: bold; background-color: #e8f5e9 !important; }}
-            .status-badge {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }}
             @media print {{ .no-print {{ display: none !important; }} body {{ margin: 10px; }} }}
         </style>
     </head>
     <body>
         <div class="no-print">
-            <button class="btn" onclick="window.print()">🖨️ BU SAYFAYI PDF YAP / YAZDIR</button>
+            <button class="btn" onclick="window.print()">🖨️ Raporu PDF Olarak Kaydet / Yazdır</button>
         </div>
         <div class="header">
-            <div class="title">🏗️ {title}</div>
+            <div class="title">{title}</div>
             <div class="date">Rapor Tarihi: {today_str}</div>
         </div>
         {content_html}
@@ -253,286 +85,439 @@ def make_report_wrapper(title, content_html):
     </html>
     """
 
-def generate_standalone_report():
-    timeline_rows = ""
-    if timeline_events:
-        df_temp = pd.DataFrame(timeline_events)
-        df_temp['dt_obj'] = pd.to_datetime(df_temp['Tarih'], format='%d.%m.%Y')
-        df_temp = df_temp.sort_values(by='dt_obj', ascending=False)
-        for _, r in df_temp.iterrows():
-            timeline_rows += f"<tr><td>{r['Tarih']}</td><td>{r['İş Kalemi']}</td><td>{r['Bölüm/Kat']}</td><td>{r['Aşama']}</td></tr>"
-    else:
-        timeline_rows = "<tr><td colspan='4' style='text-align:center; color:#999;'>Henüz tamamlanan iş adımı yok.</td></tr>"
+# ==========================================
+# 4. YAN MENÜ (SIDEBAR) & SÖZLEŞME BİRİM FİYATLARI
+# ==========================================
+st.sidebar.image("https://img.icons8.com/clouds/100/000000/building.png", width=80)
+st.sidebar.title("Havence Yönetim Paneli")
+st.sidebar.markdown("---")
 
-    main_html = f"""
-    <div class="grid">
-        <div class="card"><div class="card-lbl">Müdür Hakediş Tutarı</div><div class="card-val">₺ {total_rev:,.2f}</div></div>
-        <div class="card"><div class="card-lbl">Teknisyen Toplam Ödeme</div><div class="card-val">₺ {total_cst:,.2f}</div></div>
-        <div class="card"><div class="card-lbl">Şirket Net Kârı</div><div class="card-val">₺ {total_prf:,.2f}</div></div>
-    </div>
-    <h3>📊 Detaylı Finansal Kalem Dağılımı</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>İş Kalemi Açıklaması</th>
-                <th>İlerleme %</th>
-                <th>Müdür Hakediş</th>
-                <th>Teknisyen Ödeme</th>
-                <th>Net Kâr</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td>Arka Cephe İmalatları</td><td>{arka_net_percentage*100:.1f}%</td><td>₺ {arka_rev:,.2f}</td><td>₺ {arka_cst:,.2f}</td><td>₺ {(arka_rev-arka_cst):,.2f}</td></tr>
-            <tr><td>Ön Cephe İmalatları</td><td>{on_net_percentage*100:.1f}%</td><td>₺ {on_rev:,.2f}</td><td>₺ {on_cst:,.2f}</td><td>₺ {(on_rev-on_cst):,.2f}</td></tr>
-            <tr><td>Banyolar Suwmatik Yalıtımı</td><td>{banyo_net_percentage*100:.1f}%</td><td>₺ {banyo_rev:,.2f}</td><td>₺ {banyo_cst:,.2f}</td><td>₺ {(banyo_rev-banyo_cst):,.2f}</td></tr>
-            <tr class="total"><td>TOPLAM</td><td>-</td><td>₺ {total_rev:,.2f}</td><td>₺ {total_cst:,.2f}</td><td>₺ {total_prf:,.2f}</td></tr>
-        </tbody>
-    </table>
-    <h3>⏱️ Canlı Kronolojik Şantiye İmalat Takvimi</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Tarih</th>
-                <th>İş Kalemi</th>
-                <th>Bölüm / Kat</th>
-                <th>Tamamlanan Aşama</th>
-            </tr>
-        </thead>
-        <tbody>
-            {timeline_rows}
-        </tbody>
-    </table>
-    """
-    return make_report_wrapper("ŞANTİYE İLERLEME VE HAKEDİŞ RAPORU", main_html)
-
-# Render Global Action Button at the top
-st.markdown("### 📥 Mobil Uyumlu Rapor Çıktısı")
-report_html = generate_standalone_report()
-st.download_button(
-    label="📱 TELEFONA RESMİ PDF / EKRAN GÖRÜNTÜSÜ RAPORU İNDİR",
-    data=report_html,
-    file_name=f"santiye_resmi_rapor_{date.today().strftime('%d_%m_%Y')}.html",
-    mime="text/html",
-    use_container_width=True
+app_page = st.sidebar.radio(
+    "📂 Modül Seçimi Yapın:",
+    [
+        "🏁 Proje Genel Durumu",
+        "💰 İşveren Hak Ediş Raporu", 
+        "🏠 İç Mekan İşleri (Alçı & Boya)", 
+        "🧱 Dış Cephe İşleri", 
+        "💧 Tuvalet & Islak Hacim (Kara Sıva)",
+        "⏱️ Onay Geçmişi & Zaman Akışı"
+    ]
 )
 
-# Uygulama Sekmeleri
-tab_money, tab_timeline, tab_schedule, tab_arka, tab_on, tab_banyo = st.tabs([
-    "💰 FİNANSAL ÖZET (MONEY)", 
-    "⏱️ CANLI ŞANTİYE TAKVİMİ (TIMELINE)", 
-    "📅 HEDEF İŞ PROGRAMI",
-    "🧱 Arka Cephe Takibi", 
-    "🏢 Ön Cephe Takibi", 
-    "💧 Banyo Yalıtım Takibi"
-])
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Sözleşme Birim Fiyatları (₺/m²)")
 
-# --- 1. MONEY TAB ---
-with tab_money:
-    st.header("💵 Güncel Finansal Hakediş Dağılımı")
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric(label="💼 Proje Müdüründen Alınacak (Hakediş)", value=f"₺ {total_rev:,.2f}")
-    m2.metric(label="🛠️ Teknisyenlere Ödenecek Toplam", value=f"₺ {total_cst:,.2f}")
-    m3.metric(label="📈 Şirket Net Kârı", value=f"₺ {total_prf:,.2f}", delta=f"{(total_prf/total_rev*100 if total_rev > 0 else 0):.1f}% Kâr Oranı")
+pm_price_int = st.sidebar.number_input("İç Mekan Birim Fiyatı", value=get_state_val("global_pm_price_int", 450.0), step=10.0)
+update_state_val("global_pm_price_int", pm_price_int)
 
-    money_html = f"""
-    <div class="grid">
-        <div class="card"><div class="card-lbl">Müdür Hakediş</div><div class="card-val">₺ {total_rev:,.2f}</div></div>
-        <div class="card"><div class="card-lbl">Teknisyen Ödemeleri</div><div class="card-val">₺ {total_cst:,.2f}</div></div>
-        <div class="card"><div class="card-lbl">Şirket Net Kârı</div><div class="card-val">₺ {total_prf:,.2f}</div></div>
-    </div>
-    <table>
-        <thead><tr><th>İş Kalemi Açıklaması</th><th>İlerleme %</th><th>Müdür Hakediş</th><th>Teknisyen Ödeme</th><th>Net Kâr</th></tr></thead>
-        <tbody>
-            <tr><td>Arka Cephe İmalatları</td><td>{arka_net_percentage*100:.1f}%</td><td>₺ {arka_rev:,.2f}</td><td>₺ {arka_cst:,.2f}</td><td>₺ {(arka_rev-arka_cst):,.2f}</td></tr>
-            <tr><td>Ön Cephe İmalatları</td><td>{on_net_percentage*100:.1f}%</td><td>₺ {on_rev:,.2f}</td><td>₺ {on_cst:,.2f}</td><td>₺ {(on_rev-on_cst):,.2f}</td></tr>
-            <tr><td>Banyolar Suwmatik Yalıtımı</td><td>{banyo_net_percentage*100:.1f}%</td><td>₺ {banyo_rev:,.2f}</td><td>₺ {banyo_cst:,.2f}</td><td>₺ {(banyo_rev-banyo_cst):,.2f}</td></tr>
-            <tr class="total"><td>TOPLAM</td><td>-</td><td>₺ {total_rev:,.2f}</td><td>₺ {total_cst:,.2f}</td><td>₺ {total_prf:,.2f}</td></tr>
-        </tbody>
-    </table>
-    """
-    st.download_button("📱 BU SAYFANIN PDF / EKRAN GÖRÜNTÜSÜNÜ AL", make_report_wrapper("FINANSAL HAKEDIS RAPORU", money_html), file_name="finansal_ozet_rapor.html", mime="text/html", key="dl_money")
+pm_price_ext = st.sidebar.number_input("Dış Cephe Birim Fiyatı", value=get_state_val("global_pm_price_ext", 600.0), step=10.0)
+update_state_val("global_pm_price_ext", pm_price_ext)
 
-    summary_data = {
-        "İş Kalemi Açıklaması": ["Arka Cephe", "Ön Cephe", "Banyolar Yalıtım", "TOPLAM"],
-        "İlerleme %": [f"{arka_net_percentage*100:.1f}%", f"{on_net_percentage*100:.1f}%", f"{banyo_net_percentage*100:.1f}%", "-"],
-        "Müdür Hakediş": [f"₺ {arka_rev:,.2f}", f"₺ {on_rev:,.2f}", f"₺ {banyo_rev:,.2f}", f"₺ {total_rev:,.2f}"],
-        "Teknisyen Ödeme": [f"₺ {arka_cst:,.2f}", f"₺ {on_cst:,.2f}", f"₺ {banyo_cst:,.2f}", f"₺ {total_cst:,.2f}"],
-        "Net Kâr": [f"₺ {(arka_rev - arka_cst):,.2f}", f"₺ {(on_rev - on_cst):,.2f}", f"₺ {(banyo_rev - banyo_cst):,.2f}", f"₺ {total_prf:,.2f}"]
+pm_price_toilet = st.sidebar.number_input("Kara Sıva Birim Fiyatı", value=get_state_val("global_pm_price_toilet", 750.0), step=10.0)
+update_state_val("global_pm_price_toilet", pm_price_toilet)
+
+pm_price_wall_int = st.sidebar.number_input("Çevre Duvarı (İç Yüzey) Fiyatı", value=get_state_val("global_pm_price_wall_int", 500.0), step=10.0)
+update_state_val("global_pm_price_wall_int", pm_price_wall_int)
+
+# İlerleme Yüzdelik Ağırlıkları
+interior_weights = {"int_ano": 0.15, "int_alc": 0.40, "int_sat": 0.25, "int_boy": 0.20}
+exterior_weights_insulated = {"ext_siva": 0.30, "ext_mant": 0.40, "ext_ast": 0.10, "ext_boy": 0.20}
+exterior_weights_no_insulation = {"ext_siva": 0.45, "ext_ast": 0.15, "ext_boy": 0.40}
+
+# ==========================================
+# 5. PROJE METRAJLARI VE YAPI YAPISI
+# ==========================================
+project_structure = {
+    "Kat -1 (Bodrum Katı)": {
+        "Dükkan -1 (Net Alan)": {"area": 66.71, "type": "interior"},
+        "Bodrum Depoları": {"area": 30.22, "type": "interior"},
+        "Bodrum Ortak Koridor": {"area": 50.72, "type": "interior"},
+        "Bodrum İç Merdiven": {"area": 6.96, "type": "interior"},
+        "Arka Daire (Alt Kat)": {"area": 187.47, "type": "interior"},
+        "Bodrum Lavabo & WC": {"area": 29.50, "type": "toilet"}
+    },
+    "Zemin Giriş Katı": {
+        "Ana Giriş & Uzun Hol": {"area": 24.32, "type": "interior"},
+        "Ortak Koridor & Zemin Salon": {"area": 50.38, "type": "interior"},
+        "Zemin Kat Merdiveni": {"area": 6.96, "type": "interior"},
+        "Net Zemin Dükkan": {"area": 24.06, "type": "interior"},
+        "Arka Zemin Daire": {"area": 106.56, "type": "interior"},
+        "Zemin Arka Daire Tuvaleti": {"area": 20.87, "type": "toilet"},
+        "Zemin Dükkan Tuvaleti": {"area": 28.00, "type": "toilet"}
+    },
+    "Normal Kat 1": {
+        "Ön Daire (1)": {"area": 163.17, "type": "interior"},
+        "Arka Daire (1)": {"area": 106.56, "type": "interior"},
+        "Ortak Merdiven & Hol (1)": {"area": 50.76, "type": "interior"},
+        "Ön Daire Tuvaleti (1)": {"area": 28.00, "type": "toilet"},
+        "Arka Daire Tuvaleti (1)": {"area": 20.87, "type": "toilet"}
+    },
+    "Normal Kat 2": {
+        "Ön Daire (2)": {"area": 163.17, "type": "interior"},
+        "Arka Daire (2)": {"area": 106.56, "type": "interior"},
+        "Ortak Merdiven & Hol (2)": {"area": 50.76, "type": "interior"},
+        "Ön Daire Tuvaleti (2)": {"area": 28.00, "type": "toilet"},
+        "Arka Daire Tuvaleti (2)": {"area": 20.87, "type": "toilet"}
+    },
+    "Normal Kat 3": {
+        "Ön Daire (3)": {"area": 163.17, "type": "interior"},
+        "Arka Daire (3)": {"area": 106.56, "type": "interior"},
+        "Ortak Merdiven & Hol (3)": {"area": 50.76, "type": "interior"},
+        "Ön Daire Tuvaleti (3)": {"area": 28.00, "type": "toilet"},
+        "Arka Daire Tuvaleti (3)": {"area": 20.87, "type": "toilet"}
+    },
+    "Son Kat (Dublex / Çatı Katı)": {
+        "Son Kat Ön Daire": {"area": 163.17, "type": "interior"},
+        "Son Kat Arka Daire": {"area": 106.56, "type": "interior"},
+        "Son Kat Merdiven & Geçişler": {"area": 50.76, "type": "interior"},
+        "Dublex Ön Daire Tuvaleti": {"area": 28.00, "type": "toilet"},
+        "Dublex Arka Daire Tuvaleti": {"area": 20.87, "type": "toilet"}
+    },
+    "Binanın Dış Cepheleri": {
+        "Arka Dış Cephe - Ana Yüzey": {"area": 104.40, "type": "exterior_back"},
+        "Arka Dış Cephe - 1. Yan": {"area": 136.50, "type": "exterior_back"},
+        "Arka Dış Cephe - 2. Yan": {"area": 83.00, "type": "exterior_back"},
+        "Arka Dış Cephe - 3. Yan": {"area": 33.00, "type": "exterior_back"},
+        "Ön Dış Cephe - Ana Yüzey": {"area": 80.00, "type": "exterior_front"},
+        "Ön Dış Cephe - 1. Yan (Yalıtımsız)": {"area": 68.25, "type": "exterior_front_no_ins"},
+        "Ön Dış Cephe - 2. Yan (Yalıtımsız)": {"area": 41.50, "type": "exterior_front_no_ins"},
+        "Arka Çevre Duvarı - Dış Yüzey": {"area": 40.00, "type": "exterior_back"},
+        "Arka Çevre Duvarı - İç Yüzey": {"area": 77.00, "type": "exterior_wall_interior"}
     }
-    st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+}
 
-# --- 2. TIMELINE TAB ---
-with tab_timeline:
-    st.header("⏱️ Canlı Şantiye İmalat Takvimi")
-    
-    t_rows = ""
-    if timeline_events:
-        df_t = pd.DataFrame(timeline_events)
-        df_t['dt_obj'] = pd.to_datetime(df_t['Tarih'], format='%d.%m.%Y')
-        df_t = df_t.sort_values(by='dt_obj', ascending=False)
-        for _, r in df_t.iterrows():
-            t_rows += f"<tr><td>{r['Tarih']}</td><td>{r['İş Kalemi']}</td><td>{r['Bölüm/Kat']}</td><td>{r['Aşama']}</td></tr>"
-    else:
-        t_rows = "<tr><td colspan='4' style='text-align:center;'>Henüz veri yok.</td></tr>"
+# ==========================================
+# 6. HESAPLAMA MOTORU
+# ==========================================
+flat_sections = []
+total_project_area = 0
+total_completed_equivalent_area = 0
+total_billing_owner = 0
+
+groups_data = {
+    "interior": {"total_area": 0.0, "comp_area": 0.0},
+    "exterior_front": {"total_area": 0.0, "comp_area": 0.0},
+    "exterior_back": {"total_area": 0.0, "comp_area": 0.0},
+    "toilet": {"total_area": 0.0, "comp_area": 0.0}
+}
+
+global_idx = 0
+for floor_name, sections in project_structure.items():
+    for sec_name, info in sections.items():
+        area = info["area"]
+        sec_type = info["type"]
         
-    timeline_html = f"<table><thead><tr><th>Tarih</th><th>İş Kalemi</th><th>Bölüm / Kat</th><th>Aşama</th></tr></thead><tbody>{t_rows}</tbody></table>"
-    st.download_button("📱 BU SAYFANIN PDF / EKRAN GÖRÜNTÜSÜNÜ AL", make_report_wrapper("CANLI IMALAT TAKVIMI RAPORU", timeline_html), file_name="canli_takvim_rapor.html", mime="text/html", key="dl_time")
+        sec_progress = 0.0
+        phases = []
+        current_pm = 0.0
+        
+        group_key = "interior"
+        if "exterior_front" in sec_type:
+            group_key = "exterior_front"
+        elif "exterior_back" in sec_type or sec_type == "exterior_wall_interior":
+            group_key = "exterior_back"
+        elif sec_type == "toilet":
+            group_key = "toilet"
 
-    if timeline_events:
-        st.dataframe(df_t.drop(columns=['dt_obj']), use_container_width=True)
-    else:
-        st.info("Henüz tamamlanan bir iş adımı yok.")
+        if sec_type == "interior":
+            current_pm = pm_price_int
+            raw_phases = [("int_ano", "Ano Çıtası Çakılması"), ("int_alc", "Kaba/Makine Alçı Sıva"), ("int_sat", "Saten Alçı & Zımpara"), ("int_boy", "İç Cephe Boyası")]
+            for code, name in raw_phases:
+                is_checked = get_state_val(f"cb_{code}_{global_idx}", False)
+                if is_checked:
+                    sec_progress += interior_weights[code]
+                phases.append((code, name, is_checked))
+                
+        elif "exterior" in sec_type:
+            if sec_type == "exterior_wall_interior":
+                current_pm = pm_price_wall_int
+            else:
+                current_pm = pm_price_ext
 
-# --- 3. SCHEDULE TAB ---
-with tab_schedule:
-    st.header("📅 Proje Hedef Zaman Çizelgesi")
+            if "no_ins" not in sec_type:
+                raw_phases = [("ext_siva", "Kaba Sıva Uygulaması"), ("ext_mant", "Mantolama (Isı Yalıtım)"), ("ext_ast", "Dış Cephe Astar & Macun"), ("ext_boy", "Dış Cephe Boyası")]
+                for code, name in raw_phases:
+                    is_checked = get_state_val(f"cb_{code}_{global_idx}", False)
+                    if is_checked:
+                        sec_progress += exterior_weights_insulated[code]
+                    phases.append((code, name, is_checked))
+            else:
+                raw_phases = [("ext_siva", "Kaba Sıva Uygulaması"), ("ext_ast", "Dış Cephe Astar & Macun"), ("ext_boy", "Dış Cephe Boyası")]
+                for code, name in raw_phases:
+                    is_checked = get_state_val(f"cb_{code}_{global_idx}", False)
+                    if is_checked:
+                        sec_progress += exterior_weights_no_insulation[code]
+                    phases.append((code, name, is_checked))
+                
+        else: # toilet
+            current_pm = pm_price_toilet
+            is_checked = get_state_val(f"cb_toi_ksiva_{global_idx}", False)
+            sec_progress = 1.0 if is_checked else 0.0
+            phases.append(("toi_ksiva", "Kara Sıva Uygulaması", is_checked))
+
+        completed_area = area * sec_progress
+        total_project_area += area
+        total_completed_equivalent_area += completed_area
+        total_billing_owner += completed_area * current_pm
+        
+        groups_data[group_key]["total_area"] += area
+        groups_data[group_key]["comp_area"] += completed_area
+        
+        flat_sections.append({
+            "global_idx": global_idx, "floor": floor_name, "section": sec_name, "area": area, "type": sec_type,
+            "progress": sec_progress, "comp_area": completed_area, "pm_price": current_pm, "phases": phases
+        })
+        global_idx += 1
+
+overall_progress_pct = (total_completed_equivalent_area / total_project_area) if total_project_area > 0 else 0
+
+# ==========================================
+# 7. SAYFA MANTIĞI VE GÖRÜNÜM
+# ==========================================
+
+# --- MODÜL 1: PROJE DURUMU ---
+if app_page == "🏁 Proje Genel Durumu":
+    st.header("🏗️ Havence - Şantiye İlerleme ve Onay Paneli")
     
-    col_dt1, col_dt2, col_dt3 = st.columns(3)
-    with col_dt1:
-        arka_start = st.date_input("Arka Cephe Başlangıç", value=pd.to_datetime(get_state_val("arka_start_dt", "2026-05-01")).date(), key="s_arka_start")
-        arka_end = st.date_input("Arka Cephe Bitiş", value=pd.to_datetime(get_state_val("arka_end_dt", "2026-05-20")).date(), key="s_arka_end")
-    with col_dt2:
-        on_start = st.date_input("Ön Cephe Başlangıç", value=pd.to_datetime(get_state_val("on_start_dt", "2026-05-10")).date(), key="s_on_start")
-        on_end = st.date_input("Ön Cephe Bitiş", value=pd.to_datetime(get_state_val("on_end_dt", "2026-05-30")).date(), key="s_on_end")
-    with col_dt3:
-        banyo_start = st.date_input("Banyolar Başlangıç", value=pd.to_datetime(get_state_val("banyo_start_dt", "2026-05-05")).date(), key="s_banyo_start")
-        banyo_end = st.date_input("Banyolar Bitiş", value=pd.to_datetime(get_state_val("banyo_end_dt", "2026-05-25")).date(), key="s_banyo_end")
+    st.markdown("### 📊 İmalat Kalemleri İlerleme Durumu")
+    g_col1, g_col2, g_col3, g_col4 = st.columns(4)
+    
+    with g_col1:
+        int_pct = (groups_data["interior"]["comp_area"] / groups_data["interior"]["total_area"] * 100) if groups_data["interior"]["total_area"] > 0 else 0
+        st.metric("🏠 İç Mekan İşleri", f"% {int_pct:.1f}")
+        st.progress(int_pct / 100)
+        
+    with g_col2:
+        front_pct = (groups_data["exterior_front"]["comp_area"] / groups_data["exterior_front"]["total_area"] * 100) if groups_data["exterior_front"]["total_area"] > 0 else 0
+        st.metric("🧱 Ön Dış Cephe", f"% {front_pct:.1f}")
+        st.progress(front_pct / 100)
+        
+    with g_col3:
+        back_pct = (groups_data["exterior_back"]["comp_area"] / groups_data["exterior_back"]["total_area"] * 100) if groups_data["exterior_back"]["total_area"] > 0 else 0
+        st.metric("🧱 Arka Cephe & Çevre Duvarı", f"% {back_pct:.1f}")
+        st.progress(back_pct / 100)
+        
+    with g_col4:
+        toi_pct = (groups_data["toilet"]["comp_area"] / groups_data["toilet"]["total_area"] * 100) if groups_data["toilet"]["total_area"] > 0 else 0
+        st.metric("💧 Tuvaletler & Islak Hacimler", f"% {toi_pct:.1f}")
+        st.progress(toi_pct / 100)
 
-    update_state_val("arka_start_dt", str(arka_start))
-    update_state_val("arka_end_dt", str(arka_end))
-    update_state_val("on_start_dt", str(on_start))
-    update_state_val("on_end_dt", str(on_end))
-    update_state_val("banyo_start_dt", str(banyo_start))
-    update_state_val("banyo_end_dt", str(banyo_end))
+    st.markdown("---")
+    
+    st.subheader("🗓️ İş Programı ve Proje Takvimi")
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        start_date = st.date_input("Proje Başlangıç Tarihi:", value=datetime.strptime(get_state_val("proj_start_date", "2026-01-01"), "%Y-%m-%d").date())
+        update_state_val("proj_start_date", start_date.strftime("%Y-%m-%d"))
+    with col_t2:
+        end_date = st.date_input("Proje Hedef Bitiş Tarihi:", value=datetime.strptime(get_state_val("proj_end_date", "2026-08-01"), "%Y-%m-%d").date())
+        update_state_val("proj_end_date", end_date.strftime("%Y-%m-%d"))
+        
+    today_dt = date.today()
+    total_days = (end_date - start_date).days
+    days_passed = (today_dt - start_date).days
+    
+    expected_progress_pct = max(0.0, min(100.0, (days_passed / total_days) * 100)) if total_days > 0 else 100.0
+    actual_progress_pct = overall_progress_pct * 100
+    
+    c_m1, c_m2, c_m3 = st.columns(3)
+    c_m1.metric("Genel İlerleme Oranı", f"% {actual_progress_pct:.2f}")
+    c_m2.metric("Takvime Göre Olması Gereken", f"% {expected_progress_pct:.2f}")
+    
+    if actual_progress_pct >= expected_progress_pct:
+        c_m3.success("🟢 Zamanlamaya Uygun İlerliyor")
+    else:
+        c_m3.error("🔴 Zaman Planının Gerisinde")
 
-    today = date.today()
-    def calc_p(s, e):
-        if today < s: return 0.0
-        if today >= e: return 1.0
-        tot = (e - s).days
-        return ((today - s).days) / tot if tot > 0 else 1.0
+# --- MODÜL 2: İŞVEREN HAK EDİŞ RAPORU ---
+elif app_page == "💰 İşveren Hak Ediş Raporu":
+    st.header("💰 İşveren Dönemsel Hak Ediş Raporu")
+    
+    col_rep1, col_rep2 = st.columns([2, 1])
+    with col_rep1:
+        st.metric("Toplam Tahakkuk Eden Hak Ediş Tutarı", f"₺ {total_billing_owner:,.2f}")
+    
+    report_list = []
+    type_map = {
+        "interior": "İç Mekan İmalatları", "exterior_front": "Ön Cephe (Yalıtımlı)", 
+        "exterior_front_no_ins": "Ön Cephe (Yalıtımsız)", "exterior_back": "Arka Cephe Sistemi", 
+        "exterior_wall_interior": "Çevre Duvarı (İç Yüzey)", "toilet": "Kara Sıva (Tuvaletler)"
+    }
+    
+    html_rows = ""
+    for item in flat_sections:
+        sec_bill = item["comp_area"] * item["pm_price"]
+        
+        last_date = "Onay Bekliyor"
+        for phase_code, _, _ in item["phases"]:
+            d = get_state_val(f"date_{phase_code}_{item['global_idx']}", "")
+            if d: last_date = d
 
-    p_arka = calc_p(arka_start, arka_end)
-    p_on = calc_p(on_start, on_end)
-    p_banyo = calc_p(banyo_start, banyo_end)
-
-    def get_badge(p, a):
-        diff = a - p
-        if diff < -0.05: return "Geriye Düştü", "#d32f2f"
-        elif diff > 0.05: return "Önünde Gidiyor", "#388e3c"
-        return "Zamanında", "#1976d2"
-
-    b_arka, c_arka = get_badge(p_arka, arka_net_percentage)
-    b_on, c_on = get_badge(p_on, on_net_percentage)
-    b_banyo, c_banyo = get_badge(p_banyo, banyo_net_percentage)
-
-    sched_html = f"""
+        category_name = type_map.get(item["type"], "Dış Cephe")
+        
+        report_list.append({
+            "Kat / Yapı Bölgesi": item["floor"], "Bölüm / Mahal": item["section"], "İmalat Kategorisi": category_name,
+            "Toplam Metraj": f"{item['area']:.2f} m²", "Tamamlanma Oranı": f"% {item['progress']*100:.0f}",
+            "Sözleşme Birim Fiyatı": f"₺ {item['pm_price']:.2f}", "Hak Ediş Tutarı": f"₺ {sec_bill:,.2f}",
+            "Onay Tarihi": last_date
+        })
+        
+        html_rows += f"""
+        <tr>
+            <td>{item['floor']}</td>
+            <td>{item['section']}</td>
+            <td>{category_name}</td>
+            <td>{item['area']:.2f} m²</td>
+            <td>% {item['progress']*100:.0f}</td>
+            <td>₺ {item['pm_price']:.2f}</td>
+            <td>₺ {sec_bill:,.2f}</td>
+            <td>{last_date}</td>
+        </tr>
+        """
+        
+    full_html_report = f"""
     <table>
-        <thead><tr><th>İş Kalemi</th><th>Planlanan İlerleme</th><th>Gerçekleşen İlerleme</th><th>Durum</th></tr></thead>
+        <thead>
+            <tr>
+                <th>Kat / Bölge</th>
+                <th>Bölüm / Mahal</th>
+                <th>Kategori</th>
+                <th>Toplam Metraj</th>
+                <th>İlerleme</th>
+                <th>Birim Fiyat</th>
+                <th>Hak Ediş Tutarı</th>
+                <th>Onay Tarihi</th>
+            </tr>
+        </thead>
         <tbody>
-            <tr><td>Arka Cephe</td><td>{p_arka*100:.1f}%</td><td>{arka_net_percentage*100:.1f}%</td><td><span class="status-badge" style="background:{c_arka}">{b_arka}</span></td></tr>
-            <tr><td>Ön Cephe</td><td>{p_on*100:.1f}%</td><td>{on_net_percentage*100:.1f}%</td><td><span class="status-badge" style="background:{c_on}">{b_on}</span></td></tr>
-            <tr><td>Banyolar Yalıtım</td><td>{p_banyo*100:.1f}%</td><td>{banyo_net_percentage*100:.1f}%</td><td><span class="status-badge" style="background:{c_banyo}">{b_banyo}</span></td></tr>
+            {html_rows}
+            <tr class="total">
+                <td colspan="6" style="text-align: right;">YÜKLENİCİ TOPLAM HAK EDİŞ (HAVENCE):</td>
+                <td colspan="2">₺ {total_billing_owner:,.2f}</td>
+            </tr>
         </tbody>
     </table>
     """
-    st.download_button("📱 BU SAYFANIN PDF / EKRAN GÖRÜNTÜSÜNÜ AL", make_report_wrapper("HEDEF IS PROGRAMI ANALIZI", sched_html), file_name="hedef_is_programi_rapor.html", mime="text/html", key="dl_sched")
-
-    st.markdown("### 📊 Planlanan Takvim vs. Gerçekleşen İlerleme Analizi")
-    def display_schedule_row(title, planned, actual):
-        diff = actual - planned
-        if diff < -0.05: status, color = "🔴 PROGRAMIN GERİSİNDE", "red"
-        elif diff > 0.05: status, color = "🚀 PROGRAMIN ÖNÜNDE", "green"
-        else: status, color = "🟢 ZAMANINDA", "blue"
-        
-        st.write(f"#### {title}")
-        c_p, c_a, c_s = st.columns(3)
-        c_p.metric("Takvime Göre Planlanan", f"{planned*100:.1f}%")
-        c_a.metric("Şantiyede Gerçekleşen", f"{actual*100:.1f}%", delta=f"{diff*100:+.1f}%")
-        c_s.markdown(f"<h5 style='color:{color}; padding-top:10px;'>{status}</h5>", unsafe_allow_html=True)
-        st.markdown("---")
-
-    display_schedule_row("Arka Cephe", p_arka, arka_net_percentage)
-    display_schedule_row("Ön Cephe", p_on, on_net_percentage)
-    display_schedule_row("Banyolar Yalıtım", p_banyo, banyo_net_percentage)
-
-# --- 4. ARKA CEPHE TAB ---
-with tab_arka:
-    st.header("🧱 Arka Cephe İmalat Kademeleri")
-    col1, col2 = st.columns(2)
-    for idx, (section, area) in enumerate(arka_sections.items()):
-        target_col = col1 if idx % 2 == 0 else col2
-        with target_col:
-            st.write(f"### {section} ({area} m²)")
-            
-            st.checkbox("Astar (%5)", value=get_state_val(f"arka_ast_{idx}", False), key=f"arka_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_ast_cb_{idx}", f"arka_ast_{idx}", f"date_arka_ast_{idx}"))
-            st.checkbox("Anove Sıva (%15)", value=get_state_val(f"arka_siv_{idx}", False), key=f"arka_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_siv_cb_{idx}", f"arka_siv_{idx}", f"date_arka_siv_{idx}"))
-            st.checkbox("Mantolama (%25)", value=get_state_val(f"arka_man_{idx}", False), key=f"arka_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_man_cb_{idx}", f"arka_man_{idx}", f"date_arka_man_{idx}"))
-            st.checkbox("File ve Astar (%20)", value=get_state_val(f"arka_fil_{idx}", False), key=f"arka_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_fil_cb_{idx}", f"arka_fil_{idx}", f"date_arka_fil_{idx}"))
-            st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"arka_dek_{idx}", False), key=f"arka_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_dek_cb_{idx}", f"arka_dek_{idx}", f"date_arka_dek_{idx}"))
-            st.checkbox("Boya (%15)", value=get_state_val(f"arka_boy_{idx}", False), key=f"arka_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"arka_boy_cb_{idx}", f"arka_boy_{idx}", f"date_arka_boy_{idx}"))
-            
-            st.metric(label="Bölüm Net İlerlemesi", value=f"{arka_progresses[section]*100:.1f}%")
-            st.markdown("---")
-
-# --- 5. ÖN CEPHE TAB ---
-with tab_on:
-    st.header("🏢 Ön Cephe İmalat Kademeleri")
-    col1, col2 = st.columns(2)
-    for idx, (section, area) in enumerate(on_sections.items()):
-        target_col = col1 if idx % 2 == 0 else col2
-        with target_col:
-            st.write(f"### {section} ({area} m²)")
-            
-            st.checkbox("Astar (%5)", value=get_state_val(f"on_ast_{idx}", False), key=f"on_ast_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_ast_cb_{idx}", f"on_ast_{idx}", f"date_on_ast_{idx}"))
-            st.checkbox("Anove Sıva (%15)", value=get_state_val(f"on_siv_{idx}", False), key=f"on_siv_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_siv_cb_{idx}", f"on_siv_{idx}", f"date_on_siv_{idx}"))
-            st.checkbox("Mantolama (%25)", value=get_state_val(f"on_man_{idx}", False), key=f"on_man_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_man_cb_{idx}", f"on_man_{idx}", f"date_on_man_{idx}"))
-            st.checkbox("File ve Astar (%20)", value=get_state_val(f"on_fil_{idx}", False), key=f"on_fil_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_fil_cb_{idx}", f"on_fil_{idx}", f"date_on_fil_{idx}"))
-            st.checkbox("Dekoratif Sıva (%20)", value=get_state_val(f"on_dek_{idx}", False), key=f"on_dek_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_dek_cb_{idx}", f"on_dek_{idx}", f"date_on_dek_{idx}"))
-            st.checkbox("Boya (%15)", value=get_state_val(f"on_boy_{idx}", False), key=f"on_boy_cb_{idx}", on_change=handle_checkbox_change, args=(f"on_boy_cb_{idx}", f"on_boy_{idx}", f"date_on_boy_{idx}"))
-            
-            st.metric(label="Bölüm Net İlerlemesi", value=f"{on_progresses[section]*100:.1f}%")
-            st.markdown("---")
-
-# --- 6. BANYO YALITIM TAB ---
-with tab_banyo:
-    st.header("💧 Banyolar Suwmatik Su Yalıtımı")
-    status_options_list = ["Bekliyor", "Tamamlandı", "Muaf"]
     
-    for idx, f in enumerate(floors_data):
-        st.subheader(f["floor"])
-        c1, c2 = st.columns(2)
+    final_report_code = make_report_wrapper("Havence - Resmi İşveren Hak Ediş Raporu", full_html_report)
+    with col_rep2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.download_button(
+            label="📄 Raporu Yazdır / PDF Olarak Kaydet",
+            data=final_report_code,
+            file_name=f"Havence_Hakedis_Raporu_{date.today().strftime('%d_%m_%Y')}.html",
+            mime="text/html",
+            use_container_width=True
+        )
         
-        with c1:
-            if f["b1_area"] > 0:
-                saved_status = get_state_val(f"b1_stat_{idx}", f["b1_status"])
-                
-                # المعالجة الذكية والآمنة للفهرس لتفادي خطأ الـ ValueError
-                safe_index_b1 = status_options_list.index(saved_status) if saved_status in status_options_list else 0
-                
-                status_1 = st.selectbox(f"Banyo 1 ({f['b1_area']} m²)", status_options_list, index=safe_index_b1, key=f"b1_sb_{idx}")
-                
-                if status_1 != saved_status:
-                    update_state_val(f"b1_stat_{idx}", status_1)
-                    if status_1 == "Tamamlandı":
-                        update_state_val(f"date_b1_{idx}", date.today().strftime("%d.%m.%Y"))
-                    else:
-                        update_state_val(f"date_b1_{idx}", "")
+    st.markdown("---")
+    st.dataframe(pd.DataFrame(report_list), use_container_width=True)
+
+# --- MODÜL 3: İÇ MEKAN İŞLERİ ---
+elif app_page == "🏠 İç Mekan İşleri (Alçı & Boya)":
+    st.header("🏠 İç Mekan İnce İşler Kontrol ve İlerleme Paneli")
+    
+    for floor_name in project_structure.keys():
+        interior_items = [x for x in flat_sections if x["floor"] == floor_name and x["type"] == "interior"]
+        if interior_items:
+            with st.expander(f"⬇️ {floor_name} - İç Mekan İmalat Kalemleri", expanded=True):
+                c1, c2 = st.columns(2)
+                for i, item in enumerate(interior_items):
+                    g_id = item["global_idx"]
+                    col = c1 if i % 2 == 0 else c2
+                    with col:
+                        st.write(f"##### 📍 {item['section']} ({item['area']:.2f} m²)")
                         
-        with c2:
-            if f["b2_area"] > 0:
-                saved_status2 = get_state_val(f"b2_stat_{idx}", f["b2_status"])
+                        for code, name, checked in item["phases"]:
+                            label_map = {
+                                "int_ano": "Ano Çıtası Çakılması [15%]",
+                                "int_alc": "Makine Alçı Sıva Yapılması [40%]",
+                                "int_sat": "Saten Alçı & Zımpara Hazırlık [25%]",
+                                "int_boy": "Son Kat Dekoratif Boya [20%]"
+                            }
+                            st.checkbox(label_map[code], value=checked, key=f"ui_{code}_{g_id}", 
+                                        on_change=handle_checkbox_change, args=(f"ui_{code}_{g_id}", f"cb_{code}_{g_id}", f"date_{code}_{g_id}"))
+                        
+                        st.write(f"Bölüm İlerleme Oranı: `% {item['progress']*100:.0f}` | Eşdeğer Biten Alan: `{item['comp_area']:.2f} m²`")
+                        st.markdown("---")
+
+# --- MODÜL 4: DIŞ CEPHE İŞLERİ ---
+elif app_page == "🧱 Dış Cephe İşleri":
+    st.header("🧱 Dış Cephe Yalıtım, Sıva ve Çevre Duvarı İşleri")
+    
+    exterior_items = [x for x in flat_sections if "exterior" in x["type"]]
+    if exterior_items:
+        c1, c2 = st.columns(2)
+        for i, item in enumerate(exterior_items):
+            g_id = item["global_idx"]
+            col = c1 if i % 2 == 0 else c2
+            with col:
+                if "front" in item["type"]:
+                    prefix_label = "🎯 Ön Cephe İmalatı"
+                elif "wall_interior" in item["type"]:
+                    prefix_label = "📐 Arka Çevre Duvarı (İç Yüzey)"
+                else:
+                    prefix_label = "📐 Arka Cephe / Çevre Duvarı Dış Yüzeyi"
+
+                st.write(f"##### {prefix_label} - {item['section']} ({item['area']:.2f} m²)")
                 
-                # المعالجة الذكية والآمنة للفهرس لتفادي خطأ الـ ValueError للحمام الثاني
-                safe_index_b2 = status_options_list.index(saved_status2) if saved_status2 in status_options_list else 0
+                label_map = {
+                    "ext_siva": "Kaba Sıva Uygulaması",
+                    "ext_mant": "Mantolama Yapılması (Isı Yalıtım) [40%]",
+                    "ext_ast": "Dış Cephe Astar & Macun Çekilmesi",
+                    "ext_boy": "Dış Cephe Boya Uygulaması"
+                }
                 
-                status_2 = st.selectbox(f"Banyo 2 ({f['b2_area']} m²)", status_options_list, index=safe_index_b2, key=f"b2_sb_{idx}")
+                for code, name, checked in item["phases"]:
+                    suffix = " [30%]" if "no_ins" not in item["type"] else " [45%]"
+                    if code == "ext_mant" and "no_ins" not in item["type"]: suffix = " [40%]"
+                    elif code == "ext_ast": suffix = " [10%]" if "no_ins" not in item["type"] else " [15%]"
+                    elif code == "ext_boy": suffix = " [20%]" if "no_ins" not in item["type"] else " [40%]"
+                        
+                    st.checkbox(label_map[code] + suffix, value=checked, key=f"ui_{code}_{g_id}", 
+                                on_change=handle_checkbox_change, args=(f"ui_{code}_{g_id}", f"cb_{code}_{g_id}", f"date_{code}_{g_id}"))
                 
-                if status_2 != saved_status2:
-                    update_state_val(f"b2_stat_{idx}", status_2)
-                    if status_2 == "Tamamlandı":
-                        update_state_val(f"date_b2_{idx}", date.today().strftime("%d.%m.%Y"))
-                    else:
-                        update_state_val(f"date_b2_{idx}", "")
-        st.markdown("---")
+                st.write(f"Bölüm İlerleme Oranı: `% {item['progress']*100:.0f}` | Eşdeğer Biten Alan: `{item['comp_area']:.2f} m²`")
+                st.markdown("---")
+
+# --- MODÜL 5: TUVALET KARA SIVA İŞLERİ ---
+elif app_page == "💧 Tuvalet & Islak Hacim (Kara Sıva)":
+    st.header("💧 Islak Hacim Tuvalet Yapıları Sıva Onayları")
+    
+    for floor_name in project_structure.keys():
+        toilet_items = [x for x in flat_sections if x["floor"] == floor_name and x["type"] == "toilet"]
+        if toilet_items:
+            with st.expander(f"⬇️ {floor_name} - Islak Hacim Listesi", expanded=True):
+                c1, c2 = st.columns(2)
+                for i, item in enumerate(toilet_items):
+                    g_id = item["global_idx"]
+                    col = c1 if i % 2 == 0 else c2
+                    with col:
+                        st.write(f"##### 💧 {item['section']} ({item['area']:.2f} m²)")
+                        code, name, checked = item["phases"][0]
+                        st.checkbox("Su Yalıtım Altı Kara Sıva Tamamlandı [100%]", value=checked, key=f"ui_{code}_{g_id}", 
+                                    on_change=handle_checkbox_change, args=(f"ui_{code}_{g_id}", f"cb_{code}_{g_id}", f"date_{code}_{g_id}"))
+                        st.write(f"Durum: `{'Onaylandı' if checked else 'Devam Ediyor'}` | Alan: `{item['comp_area']:.2f} m²`")
+                        st.markdown("---")
+
+# --- MODÜL 6: ZAMAN AKIŞ KAYITLARI ---
+elif app_page == "⏱️ Onay Geçmişi & Zaman Akışı":
+    st.header("⏱️ Onaylanan İmalat Adımlarının Tarihçesi")
+    
+    timeline_events = []
+    for item in flat_sections:
+        g_id = item["global_idx"]
+        for phase_code, phase_name, _ in item["phases"]:
+            d = get_state_val(f"date_{phase_code}_{g_id}", "")
+            if d:
+                timeline_events.append({
+                    "Onay Tarihi": d, "Yapı Bölgesi / Kat": item["floor"], "İmalat Mahali": item["section"], "Onaylanan İmalat Aşaması": phase_name
+                })
+                
+    if timeline_events:
+        df_time = pd.DataFrame(timeline_events)
+        df_time['dt_parse'] = pd.to_datetime(df_time['Onay Tarihi'], format='%d.%m.%Y')
+        df_time = df_time.sort_values(by='dt_parse', ascending=False).drop(columns=['dt_parse'])
+        st.dataframe(df_time, use_container_width=True)
+    else:
+        st.info("Henüz onaylanmış veya tamamlanmış bir imalat adımı bulunmamaktadır.")
